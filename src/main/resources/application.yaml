@@ -1,3 +1,38 @@
 spring:
   application:
     name: timesheet
+  profiles:
+    active: local
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: 8080
+
+  # JPA e Hibernate valgono ovunque (validati da Liquibase)
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    open-in-view: false
+
+  # Liquibase vale ovunque
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  # Mail comune
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ''
+    password: ''
+    properties:
+      mail:
+        smtp:
+          auth: true
+          connectiontimeout: 5000
+          timeout: 5000
+          starttls:
+            enable: true
