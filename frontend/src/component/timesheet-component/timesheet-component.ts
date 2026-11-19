@@ -1,25 +1,27 @@
-import {Component, inject, signal} from '@angular/core';
-import {Project, ProjectService} from '../../service/project-service';
+import {Component, computed} from '@angular/core';
+import {httpResource} from '@angular/common/http';
+import {Project} from '../../service/project-service';
+import {TimesheetGridComponent} from '../timesheet-grid-component/timesheet-grid-component';
 
 @Component({
-  imports: [],
+  imports: [TimesheetGridComponent],
   selector: 'app-timesheet-component',
   styleUrl: './timesheet-component.css',
   templateUrl: './timesheet-component.html',
 })
 export class TimesheetComponent {
-  private projectService = inject(ProjectService);
+  readonly projectsResource = httpResource<Project[]>(() => ({
+    url: '/api/projects/getProjects',
+    method: 'POST',
+    body: {},
+  }));
 
-  projects = signal<Project[]>([]);
-  errorMessage = signal<string | null>(null);
+  // Espone sempre un array (mai undefined) per template e [projects]="projects()"
+  readonly projects = computed(() => this.projectsResource.value() ?? []);
 
-  ngOnInit(): void {
-    this.projectService.getProjects().subscribe({
-      next: (data) => this.projects.set(data),
-      error: (err) => {
-        console.error('Errore caricamento progetti:', err);
-        this.errorMessage.set('Impossibile caricare le commesse.');
-      }
-    });
-  }
+  readonly errorMessage = computed(() =>
+    this.projectsResource.error()
+      ? 'Impossibile caricare le commesse.'
+      : null
+  );
 }

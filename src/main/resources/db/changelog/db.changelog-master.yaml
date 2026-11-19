@@ -1,3 +1,5 @@
 databaseChangeLog:
   - include:
-      file: db/changelog/migrations/2026_11_19_create_init_tables.sql
+      file: db/changelog/migrations/2026_11_19_create_project_table.sql
+  - include:
+      file: db/changelog/migrations/2026_11_19_create_table_users.sql

@@ -1,6 +1,6 @@
 -- liquibase formatted sql
 
--- changeset francesco:01-create-init-tables
+-- changeset francesco:01-create-project-table
 -- comment: Creation of the initial database tables
 
 CREATE TABLE project

@@ -1,4 +1,3 @@
-<p>timesheet-component works!</p>
 <h2>Commesse disponibili</h2>
 
 @if (errorMessage()) {
@@ -13,3 +12,5 @@
   </option>
   }
 </select>
+
+<app-timesheet-grid-component [projects]="projects()"></app-timesheet-grid-component>
