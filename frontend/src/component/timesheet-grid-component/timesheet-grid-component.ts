@@ -1,11 +1,10 @@
 import { Component, computed, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import {Project} from '../../service/project-service';
+import { Project } from '../../service/project-service';
 
-export interface ProjectOption {
-  id: number;
-  code: string;
-  description: string;
+export interface MonthOption {
+  value: number; // 0-based (0 = Gennaio .. 11 = Dicembre)
+  label: string;
 }
 
 export interface DayColumn {
@@ -14,14 +13,10 @@ export interface DayColumn {
   isWeekend: boolean;
 }
 
-export interface DayEntry {
-  hours: number | null;
-  projectId: number | null;
-}
-
 export interface TimesheetRow {
   id: string;
-  entries: Record<number, DayEntry>;
+  projectId: number | null;
+  hoursByDay: Record<number, number | null>;
 }
 
 @Component({
@@ -31,26 +26,43 @@ export interface TimesheetRow {
   styleUrl: './timesheet-grid-component.css',
 })
 export class TimesheetGridComponent {
-  // Lista progetti passata dal componente padre (es. caricata da ProjectService)
+  // Lista progetti passata dal componente padre
   projects = input<Project[]>([]);
 
   private readonly now = new Date();
   readonly year = this.now.getFullYear();
-  readonly month = this.now.getMonth(); // 0-based
 
-  readonly monthTitle = new Intl.DateTimeFormat('it-IT', {
-    month: 'long',
-    year: 'numeric',
-  }).format(this.now);
+  // Mese selezionato (0-based, inizializzato al mese corrente)
+  readonly selectedMonth = signal<number>(this.now.getMonth());
 
-  // Giorni del mese corrente con flag sabato/domenica
+  // Opzioni per il menu a tendina dei mesi dell'anno corrente
+  readonly months: MonthOption[] = Array.from({ length: 12 }, (_, monthIndex) => {
+    const date = new Date(this.year, monthIndex, 1);
+    const label = new Intl.DateTimeFormat('it-IT', { month: 'long' }).format(date);
+    return {
+      value: monthIndex,
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+    };
+  });
+
+  readonly monthTitle = computed(() => {
+    const date = new Date(this.year, this.selectedMonth(), 1);
+    return new Intl.DateTimeFormat('it-IT', {
+      month: 'long',
+      year: 'numeric',
+    }).format(date);
+  });
+
+  // Giorni del mese selezionato con flag sabato/domenica
   readonly days = computed<DayColumn[]>(() => {
-    const daysInMonth = new Date(this.year, this.month + 1, 0).getDate();
+    const currentYear = this.year;
+    const currentMonth = this.selectedMonth();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const weekdayFormatter = new Intl.DateTimeFormat('it-IT', { weekday: 'short' });
 
     return Array.from({ length: daysInMonth }, (_, idx) => {
       const day = idx + 1;
-      const date = new Date(this.year, this.month, day);
+      const date = new Date(currentYear, currentMonth, day);
       const dayOfWeek = date.getDay(); // 0 = Domenica, 6 = Sabato
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       const weekdayShort = weekdayFormatter.format(date).replace('.', '');
@@ -66,28 +78,55 @@ export class TimesheetGridComponent {
   // Righe del timesheet (iniziamo con 1 riga)
   readonly rows = signal<TimesheetRow[]>([this.createEmptyRow()]);
 
-  // Totale ore del mese (esempio utile)
+  // Totale ore del mese selezionato
   readonly totalHours = computed(() => {
+    const validDays = new Set(this.days().map((d) => d.day));
     let sum = 0;
+
     for (const row of this.rows()) {
-      for (const entry of Object.values(row.entries)) {
-        if (typeof entry.hours === 'number' && !Number.isNaN(entry.hours)) {
-          sum += entry.hours;
+      for (const [dayKey, hours] of Object.entries(row.hoursByDay)) {
+        if (validDays.has(Number(dayKey)) && typeof hours === 'number' && !Number.isNaN(hours)) {
+          sum += hours;
         }
       }
     }
     return sum;
   });
 
-  private createEmptyRow(): TimesheetRow {
-    const entries: Record<number, DayEntry> = {};
+  private createEmptyRow(projectId: number | null = null): TimesheetRow {
+    const hoursByDay: Record<number, number | null> = {};
     for (const d of this.days()) {
-      entries[d.day] = { hours: null, projectId: null };
+      hoursByDay[d.day] = null;
     }
     return {
       id: crypto.randomUUID(),
-      entries,
+      projectId,
+      hoursByDay,
     };
+  }
+
+  onMonthChange(rawMonth: string): void {
+    const monthValue = Number(rawMonth);
+    if (Number.isNaN(monthValue) || monthValue < 0 || monthValue > 11) {
+      return;
+    }
+
+    this.selectedMonth.set(monthValue);
+
+    // Ricostruisce le righe mantenendo i progetti già scelti, ma allineando i giorni al nuovo mese
+    const newDays = this.days();
+    this.rows.update((currentRows) =>
+      currentRows.map((row) => {
+        const nextHoursByDay: Record<number, number | null> = {};
+        for (const d of newDays) {
+          nextHoursByDay[d.day] = row.hoursByDay[d.day] ?? null;
+        }
+        return {
+          ...row,
+          hoursByDay: nextHoursByDay,
+        };
+      })
+    );
   }
 
   addRow(): void {
@@ -100,6 +139,14 @@ export class TimesheetGridComponent {
     );
   }
 
+  updateRowProject(rowId: string, rawProjectId: string): void {
+    const projectId = rawProjectId === '' ? null : Number(rawProjectId);
+
+    this.rows.update((current) =>
+      current.map((row) => (row.id === rowId ? { ...row, projectId } : row))
+    );
+  }
+
   updateHours(rowId: string, day: number, rawValue: string): void {
     const parsed = rawValue === '' ? null : Number(rawValue);
     const hours = parsed !== null && Number.isNaN(parsed) ? null : parsed;
@@ -107,30 +154,11 @@ export class TimesheetGridComponent {
     this.rows.update((current) =>
       current.map((row) => {
         if (row.id !== rowId) return row;
-        const prev = row.entries[day] ?? { hours: null, projectId: null };
         return {
           ...row,
-          entries: {
-            ...row.entries,
-            [day]: { ...prev, hours },
-          },
-        };
-      })
-    );
-  }
-
-  updateProject(rowId: string, day: number, rawProjectId: string): void {
-    const projectId = rawProjectId === '' ? null : Number(rawProjectId);
-
-    this.rows.update((current) =>
-      current.map((row) => {
-        if (row.id !== rowId) return row;
-        const prev = row.entries[day] ?? { hours: null, projectId: null };
-        return {
-          ...row,
-          entries: {
-            ...row.entries,
-            [day]: { ...prev, projectId },
+          hoursByDay: {
+            ...row.hoursByDay,
+            [day]: hours,
           },
         };
       })
@@ -138,7 +166,11 @@ export class TimesheetGridComponent {
   }
 
   saveTimesheet(): void {
-    // Qui puoi trasformare `this.rows()` nel payload DTO da inviare al backend Spring Boot
-    console.log('Dati timesheet pronti:', this.rows());
+    const payload = {
+      year: this.year,
+      month: this.selectedMonth() + 1, // 1-12 se preferisci inviare mese umano al backend
+      rows: this.rows(),
+    };
+    console.log('Dati timesheet pronti:', payload);
   }
 }

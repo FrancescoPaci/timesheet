@@ -1,16 +1,20 @@
-<h2>Commesse disponibili</h2>
+<div class="row">
+  <div class="col-12">
+    <h2>Commesse disponibili</h2>
 
-@if (errorMessage()) {
-<p style="color: red;">{{ errorMessage() }}</p>
-}
+    @if (errorMessage()) {
+    <p style="color: red;">{{ errorMessage() }}</p>
+    }
 
-<select>
-  <option value="">-- Seleziona una commessa --</option>
-  @for (project of projects(); track project.id) {
-  <option [value]="project.id">
-    {{ project.code }} - {{ project.description }}
-  </option>
-  }
-</select>
+    <select>
+      <option value="">-- Seleziona una commessa --</option>
+      @for (project of projects(); track project.id) {
+      <option [value]="project.id">
+        {{ project.code }} - {{ project.description }}
+      </option>
+      }
+    </select>
 
-<app-timesheet-grid-component [projects]="projects()"></app-timesheet-grid-component>
+    <app-timesheet-grid-component [projects]="projects()"></app-timesheet-grid-component>
+  </div>
+</div>
